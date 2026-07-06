@@ -42,9 +42,17 @@ public:
   }
   void SetFermi(Bool_t flag = kTRUE) { fFermiflag = flag; }
   void SetDivergence(Float_t bmdiv = 0.) { fBeamDiv = bmdiv; }
+  void SetSampleDivergence(Float_t min = -999., Float_t max = -999.) {
+    fBeamDivMin = min;
+    fBeamDivMax = max;
+  }
   void SetCrossing(Float_t xingangle = 0., Int_t xingplane = 2) {
     fBeamCrossAngle = xingangle;
     fBeamCrossPlane = xingplane;
+  }
+  void SetSampleCrossing(Float_t min = -999., Float_t max = -999.) {
+    fBeamCrossAngleMin = min;
+    fBeamCrossAngleMax = max;
   }
 
   // Getters
@@ -54,10 +62,10 @@ public:
 
 protected:
   Bool_t   fDebug;              // Debugging flag
-  Float_t  fImpactParameter;    // Impact parameter, if <=0 sample from realistic distribution
+  Float_t  fImpactParameter;    // Impact parameter, if <= 0 sample from realistic distribution
   Bool_t   fNpartFluctuation;   // Enable gaussian fluctuation of sampled number of particles
   Int_t    fNpart;              // Number of particles to be generated
-                                // if>0 overwrite the impact-parameter information
+                                // if > 0 overwrite the impact-parameter information
   Int_t    fPDGcode;            // Particle to be generated - can be n (2112) or p (2212)
   Float_t  fPtot;               // Nucleon momentum
   Float_t  fPseudoRapidity;     // Pseudorapidity: =0->track director cosines, !=0->pc.eta
@@ -66,7 +74,11 @@ protected:
   Float_t  fCosz;               // Director cos of the track - z direction
   Bool_t   fFermiflag;          // Fermi momentum flag (true -> Fermi smearing)
   Float_t  fBeamDiv;            // Beam divergence (angle in rad)
-  Float_t  fBeamCrossAngle;     // Beam crossing angle (angle in rad)
+  Float_t  fBeamDivMin;         // Minimum beam divergence, if >= 0 sample from uniform distribution
+  Float_t  fBeamDivMax;         // Maximum beam divergence, if > 0 sample from uniform distribution
+  Float_t  fBeamCrossAngle;     // Beam crossing angle (angle in rad), can be negative
+  Float_t  fBeamCrossAngleMin;  // Minimum beam crossing angle, if > -999 sample from uniform distribution
+  Float_t  fBeamCrossAngleMax;  // Maximum beam crossing angle, if > -999 sample from uniform distribution
   Int_t    fBeamCrossPlane;     // Beam crossing plane
                                 // (=1 -> horizontal, =2 -> vertical plane)
 

@@ -36,7 +36,9 @@ GeneratorSpectators::GeneratorSpectators()
   SetDirection();
   SetFermi();
   SetDivergence();
+  SetSampleDivergence();
   SetCrossing();
+  SetSampleCrossing();
 
   for(Int_t i=0; i<201; i++){
      fProbintp[i] = 0;
@@ -49,14 +51,15 @@ GeneratorSpectators::GeneratorSpectators()
 
 void GeneratorSpectators::Init() {
   printf("\n **** GeneratorSpectators initialization:\n");
-  printf("   Impact parameter: %f fm\n", fImpactParameter);
-  printf("   Number of particles to be generated (overwrites estimation from impact parameter): %d\n", fNpart);
-  printf("   Particle PDG: %d, Track: cosx = %f cosy = %f cosz = %f \n", fPDGcode, fCosx, fCosy, fCosz);
-  printf("   Maximum momentum: %f MeV/c", fPtot);
-  printf("   Fermi flag: %d, Beam divergence: %f, Crossing angle: %f, plane: %d\n\n",
-             fFermiflag, fBeamDiv, fBeamCrossAngle, fBeamCrossPlane);
-  // Initialize Fermi momentum distributions for Pb-Pb
-  FermiTwoGaussian(208.);
+  printf("  Impact parameter: %f fm\n", fImpactParameter);
+  printf("  Number of particles to be generated (overwrites estimation from impact parameter): %d\n", fNpart);
+  printf("  Particle PDG: %d, Track: cosx = %f cosy = %f cosz = %f\n", fPDGcode, fCosx, fCosy, fCosz);
+  printf("  Maximum momentum: %f GeV/c, Fermi flag: %d\n", fPtot, fFermiflag);
+  printf("  Beam divergence: %f, Crossing angle: %f, plane: %d\n", fBeamDiv, fBeamCrossAngle, fBeamCrossPlane);
+  printf("  Sample beam divergence: %f-%f (overwrites beam divergence)\n", fBeamDivMin, fBeamDivMax);
+  printf("  Sample crossing angle: %f-%f (overwrites crossing angle)\n", fBeamCrossAngleMin, fBeamCrossAngleMax);
+
+  FermiTwoGaussian(208.);   // Initialize Fermi momentum distributions for Pb-Pb
 }
 
 void GeneratorSpectators::GenerateEvent() {
@@ -88,24 +91,24 @@ void GeneratorSpectators::GenerateEvent() {
       pLab[2] = ptot * TMath::Cos(scang);
     }
 
-    for (int i = 0; i < 3; i++)
-      fP[i] = pLab[i];
+    for (int j = 0; j < 3; j++)
+      fP[j] = pLab[j];
 
     if (fDebug) {
       printf("\n Particle momentum before divergence and crossing: ");
-      printf(" 	pLab = (%f, %f, %f)\n", pLab[0], pLab[1], pLab[2]);
+      printf("pLab = (%f, %f, %f)\n", pLab[0], pLab[1], pLab[2]);
     }
 
     // Beam divergence and crossing angle
-    if (TMath::Abs(fBeamCrossAngle) > 0.) {
+    if (TMath::Abs(fBeamCrossAngle) > 0. || (fBeamCrossAngleMin > -999. && fBeamCrossAngleMax > -999.)) {
       BeamCrossing(pLab);
-      for (int i = 0; i < 3; i++)
-        fP[i] = pLab[i];
+      for (int j = 0; j < 3; j++)
+        fP[j] = pLab[j];
     }
-    if (TMath::Abs(fBeamDiv) > 0.) {
+    if (TMath::Abs(fBeamDiv) > 0. || (fBeamDivMin >= 0. && fBeamDivMax > 0.)) {
       BeamDivergence(pLab);
-      for (int i = 0; i < 3; i++)
-        fP[i] = pLab[i];
+      for (int j = 0; j < 3; j++)
+        fP[j] = pLab[j];
     }
 
     Double_t mass = TDatabasePDG::Instance()->GetParticle(fPDGcode)->Mass();
@@ -120,8 +123,8 @@ void GeneratorSpectators::GenerateEvent() {
         ExtractFermi(fPDGcode, ddp);
       fP0 = TMath::Sqrt(fP[0] * fP[0] + fP[1] * fP[1] + fP[2] * fP[2] +
                         mass * mass);
-      for (int i = 0; i < 3; i++)
-        dddp[i] = ddp[i];
+      for (int j = 0; j < 3; j++)
+        dddp[j] = ddp[j];
       dddp0 = TMath::Sqrt(dddp[0] * dddp[0] + dddp[1] * dddp[1] +
                           dddp[2] * dddp[2] + mass * mass);
 
@@ -129,12 +132,12 @@ void GeneratorSpectators::GenerateEvent() {
       TLorentzVector pFermi(dddp[0], dddp[1], dddp[2], dddp0);
       pFermi.Boost(b);
 
-      for (int i = 0; i < 3; i++)
-        fP[i] = pFermi[i];
+      for (int j = 0; j < 3; j++)
+        fP[j] = pFermi[j];
     }
 
     if (fDebug)
-      printf(" ### Particle momentum = (%f, %f, %f)\n", fP[0], fP[1], fP[2]);
+      printf(" Particle momentum = (%f, %f, %f)\n", fP[0], fP[1], fP[2]);
 
     Double_t energy = TMath::Sqrt(fP[0] * fP[0] + fP[1] * fP[1] +
                                   fP[2] * fP[2] + mass * mass);
@@ -207,7 +210,7 @@ void GeneratorSpectators::FermiTwoGaussian(Float_t A) {
     fProbintn[i] = fProbintp[i];
   }
   if (fDebug)
-    printf("		Initialization of Fermi momenta distribution \n");
+    printf("  Initialization of Fermi momenta distribution \n");
 }
 
 void GeneratorSpectators::ExtractFermi(Int_t id, Double_t *ddp) {
@@ -242,19 +245,32 @@ void GeneratorSpectators::ExtractFermi(Int_t id, Double_t *ddp) {
 
 void GeneratorSpectators::BeamCrossing(Double_t *pLab)
 {
-  // Applying beam crossing angle
-  pLab[1] = pLab[2]*TMath::Sin(fBeamCrossAngle)+pLab[1]*TMath::Cos(fBeamCrossAngle);
-  pLab[2] = pLab[2] * TMath::Cos(fBeamCrossAngle) -
-            pLab[1] * TMath::Sin(fBeamCrossAngle);
+  // Sample beam crossing angle if set (angle can be negative, so -999 marks "not set")
+  if (fBeamCrossAngleMin > -999. && fBeamCrossAngleMax > -999.) {
+    fBeamCrossAngle = gRandom->Uniform(fBeamCrossAngleMin, fBeamCrossAngleMax);
+  }
+
+  // Applying beam crossing angle: rotate the plane selected by fBeamCrossPlane
+  // (=1 -> horizontal, x-z plane; =2 -> vertical, y-z plane)
+  Int_t idx = (fBeamCrossPlane == 1) ? 0 : 1;
+  Double_t p0 = pLab[idx];
+  Double_t z0 = pLab[2];
+  pLab[idx] = z0 * TMath::Sin(fBeamCrossAngle) + p0 * TMath::Cos(fBeamCrossAngle);
+  pLab[2]   = z0 * TMath::Cos(fBeamCrossAngle) - p0 * TMath::Sin(fBeamCrossAngle);
 
   if (fDebug) {
     printf(" Beam crossing angle = %f mrad -> ", fBeamCrossAngle * 1000.);
-    printf("  p = (%f, %f, %f)\n", pLab[0], pLab[1], pLab[2]);
+    printf("p = (%f, %f, %f)\n", pLab[0], pLab[1], pLab[2]);
   }
 }
 
 void GeneratorSpectators::BeamDivergence(Double_t *pLab)
 {
+  // Sample beam divergence if set
+  if (fBeamDivMin >= 0. && fBeamDivMax > 0.) {
+    fBeamDiv = gRandom->Uniform(fBeamDivMin, fBeamDivMax);
+  }
+  
   // Applying beam divergence and crossing angle
   Double_t pmq = 0.;
   for (int i = 0; i < 3; i++)
@@ -292,7 +308,7 @@ void GeneratorSpectators::BeamDivergence(Double_t *pLab)
 
   if (fDebug) {
     printf(" Beam divergence = %f mrad -> ", fBeamDiv * 1000.);
-    printf("  p = (%f, %f, %f)\n", pLab[0], pLab[1], pLab[2]);
+    printf("p = (%f, %f, %f)\n", pLab[0], pLab[1], pLab[2]);
   }
 }
 
@@ -316,10 +332,11 @@ void GeneratorSpectators::AddAngle(Double_t theta1, Double_t phi1,
 
   Double_t rtetsum = TMath::ACos(cz);
   Double_t tetsum = conv*rtetsum;
-  Double_t fisum = 0;
+  Double_t fisum = 0.;
 
   if (tetsum == 0. || tetsum == 180.) {
-    fisum = 0.;
+    angleSum[0] = tetsum;
+    angleSum[1] = fisum;
     return;
   }
 
@@ -332,6 +349,7 @@ void GeneratorSpectators::AddAngle(Double_t theta1, Double_t phi1,
   fisum = conv*TMath::ACos(temp);
   if (cy < 0)
     fisum = 360. - fisum;
+
   angleSum[0] = tetsum;
   angleSum[1] = fisum;
 }
@@ -357,7 +375,7 @@ void GeneratorSpectators::InitParameterizations() {
 Double_t GeneratorSpectators::ImpParFunc(Double_t *x, Double_t *par) {
   // Function for parameterization of impact parameter distribution
   // from fit to Pb-Pb at 5.02 TeV
-  if (x[0] < 5.e-2 or x[0] > 16.5)
+  if (x[0] < 5.e-2 || x[0] > 16.5)
     return 0.0;
 
   if (x[0] < 13.8)
