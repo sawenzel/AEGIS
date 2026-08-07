@@ -61,6 +61,10 @@ done
 # Sampler: needs the real library (ee_event_ plus the eernd -> gRandom bridge).
 \$CXX -std=c++17 -O2 '$HERE'/dump_points.cxx -o dump_points \
      \$(root-config --cflags --libs) -L'$LIB' -lTEPEMGEN -Wl,-rpath,'$LIB' -lgfortran
+
+# Phase 3 gate: C++ sampler against epemgen.f, same seeded gRandom.
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/compare_sampler.cxx -o compare_sampler \
+     \$(root-config --cflags --libs) -L'$LIB' -lTEPEMGEN -Wl,-rpath,'$LIB' -lgfortran -lquadmath
 "
 
 echo "tools in: $OUT"

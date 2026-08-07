@@ -28,19 +28,39 @@ namespace o2::aegis::tepemgen
 {
 
 // --- parameters, verbatim from the DATA statements in epemgen.f -------------
+//
+// SINGLE PRECISION, and that is not a typo. The DATA statements carry no D0
+// suffix -- `data parYpY / -4.8584, 0.11403E-01, ... /` -- so in Fortran these
+// are REAL*4 literals widened to REAL*8 in the implicit real*8 context. The
+// values the Fortran actually uses therefore differ from their decimal
+// appearance in the 8th digit: -4.8584 is really -4.8583998680114746.
+//
+// f32() reproduces that. Physically it is irrelevant -- these are fit
+// parameters good to four digits, and the envelope is only a proposal
+// distribution whose imperfection the exact-cross-section weight corrects
+// exactly. But without it the C++ and the Fortran diverge by ~1e-8 per event,
+// which is far too large to dismiss as round-off and costs an afternoon to
+// explain. Measured: it is the whole of the 7.3e-8 stream discrepancy.
+//
 // The commented-out first row of each DATA statement is the pre-1998 scaling;
 // the active row is used here, as in the Fortran.
-inline constexpr double kParXpX[5] = {8.3668, 1.2004, 0.47225, 9.6951, 2.3814};
-inline constexpr double kParXmX[4] = {9.5038, 39.040, 1.9492, 3.5660};
-inline constexpr double kParYpY[6] = {-4.8584, 0.11403e-01, 4.0649,
-                                      0.38920e-04, 4.0283, 0.19238e-01};
-inline constexpr double kParYmY[6] = {1.80, 8., 1.7438, 0.17867, 24.188, 1.3097};
+
+/// Round a decimal through REAL*4, as an unsuffixed Fortran literal does.
+constexpr double f32(double x) { return static_cast<double>(static_cast<float>(x)); }
+inline constexpr double kParXpX[5] = {f32(8.3668), f32(1.2004), f32(0.47225),
+                                      f32(9.6951), f32(2.3814)};
+inline constexpr double kParXmX[4] = {f32(9.5038), f32(39.040), f32(1.9492),
+                                      f32(3.5660)};
+inline constexpr double kParYpY[6] = {f32(-4.8584), f32(0.11403e-01), f32(4.0649),
+                                      f32(0.38920e-04), f32(4.0283), f32(0.19238e-01)};
+inline constexpr double kParYmY[6] = {f32(1.80), f32(8.), f32(1.7438),
+                                      f32(0.17867), f32(24.188), f32(1.3097)};
 
 /// Kink in DsdXpX; also the branch point in ee_event's Icase logic.
-inline constexpr double kXpXKink = 0.6;
+inline constexpr double kXpXKink = f32(0.6);
 /// Kinks in DsdYmY.
-inline constexpr double kYmYKink1 = 0.18;
-inline constexpr double kYmYKink2 = 4.00;
+inline constexpr double kYmYKink1 = f32(0.18);
+inline constexpr double kYmYKink2 = f32(4.00);
 
 // --- envelopes --------------------------------------------------------------
 

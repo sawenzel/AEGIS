@@ -154,21 +154,36 @@ curve tracks the quad reference. At `dphi = pi` plain double is wrong by up to
 Carried forward: eliminate the redundant `Iz` recomputation in the `Id`/`Iv`
 call tree, which is where the cost of the wider type should be recovered.
 
-### Phase 3 — `epemgen.f` sampler, quadrature replaced
+### Phase 3 — `epemgen.f` sampler, quadrature replaced — **sampler done**
 
-Port the samplers **preserving the exact order of `eernd` consumption**. With a
-seeded `gRandom` this yields event-by-event identical output against the
-Fortran — a far stronger gate than comparing histograms, easy to lose and hard
-to recover. Design for it deliberately.
+`include/EpEmSampler.h` (ee_init + ee_event), `include/Envelopes.h`,
+`include/Quadrature.h`. `Dgauss` and `Dtrint` are gone: the five 1-D integrals
+go to a templated adaptive Gauss-Kronrod, and the two 2-D triangle integrals
+collapse to 1-D via the diamond reduction (`02-findings.md` section 11).
 
-Replace `Dgauss` with a self-contained templated adaptive Gauss-Kronrod
-(G7-K15, ~60 lines). Do **not** use GSL or `ROOT::Math::Integrator`: both are
-`double`-only, which breaks the precision templating. This is the case where
-hand-rolling is the smaller dependency.
+Validated by `tools/compare_sampler`, driving both from the same seeded
+`gRandom`, 200k events:
 
-*Gates, in order:* (i) event-identical under fixed seed with double math;
-(ii) total cross section against the 35818.8 b baseline and O2DPG's 35237.5 b;
-(iii) KS/chi2 on the y, pt and dphi distributions, old vs new.
+| | |
+|---|---|
+| stream identity | **exact** — worst \|delta\| 0.000e+00 |
+| x-section vs Fortran | +0.0011% (seed 777); -0.0705% (seed 12345, 50k) |
+| KS on y(e-), y(e+), log10 pt, phi | D = 0, p = 1.000 |
+| escalated to quad | 4.7% |
+
+Stream identity was worth insisting on. It initially failed by 7.3e-8 — far too
+large for round-off — which turned out to be that the `DATA` statements in
+`epemgen.f` carry **no `D0` suffix**, so every envelope parameter is a REAL*4
+literal widened to REAL*8. `-4.8584` is really `-4.8583998680114746`.
+Reproducing that (`f32()` in `Envelopes.h`) made the streams exact. A purely
+statistical gate would have shown two consistent histograms and left that
+sitting there.
+
+The x-section difference is sample-dependent at the 1e-3..1e-4 level, which is
+what a precision correction concentrated in rare high-weight events looks like.
+
+**Remaining for Phase 3:** wire `TGenEpEmv1`/`TGenQEDBg` onto the C++ sampler,
+behind a switch while the Fortran is still present.
 
 ### Phase 4 — remove the Fortran
 
