@@ -32,26 +32,77 @@ The original authors knew. `diffcross.f` line 27:
 
 That instruction was never followed.
 
-## 2. Where it bites, and why intermittently
+## 2. Where it bites — measured, and it is not where we first guessed
 
-`Diffcross` evaluates `cosh(ym +/- wy)` and `sinh(wy - ym)` with
-`wy = arcosh(gamma)`. Near `ym = -wy` those collapse to their minima and the
-dynamic range widens further.
+### The quad oracle
 
-The figure attached to O2-6340 (differential cross section against electron
-rapidity, `double` vs `__float128`) shows exactly this: the two agree
-everywhere except roughly `y in [-9, -6.5]`, where the `double` curve becomes
-dense noise spanning fourteen decades, peaking around 4e5 where the true value
-is ~1e-2.
+`gfortran -freal-8-real-16` promotes every `DOUBLE PRECISION` to `REAL*16`, so
+the **unmodified** `diffcross.f` can be compiled a second time and evaluated in
+quad. That gives a reference curve before any C++ exists. `tools/` builds both
+(`*_d`, `*_q`); they cannot share an executable — same symbol names, different
+ABI — so sampling and evaluation are separate programs joined by a file.
 
-**Production runs `QEDGenParam.yMin=-7; yMax=7`.** The window edge therefore
-clips the shoulder of the corrupted zone, which is why failures are
-intermittent rather than universal.
+Sanity check: both report `gamma=2857.14`, `wy=arcosh(gamma)=8.65072`.
 
-**Falsifiable prediction, not yet tested:** the corrupted window should track
-`arcosh(gamma)`, so it must move if the beam energy changes. Phase 0 runs the
-scan at two energies to confirm or kill this. If it does not move, the
-localisation is wrong and the escalation trigger below needs rethinking.
+### A hypothesis that was wrong
+
+An earlier reading of this code predicted the corrupted window would bracket
+`ym = -arcosh(gamma)`, the beam rapidity, because `Diffcross` evaluates
+`cosh(ym +/- wy)`. **Measurement refutes that.** Fixing `yp` and scanning `ym`
+at `dphi = pi` puts the worst point at `ym ~ -yp`, tracking `yp` and not `wy`:
+
+| yp | -8.65 | -6.0 | -3.0 | 0.0 | 2.0 | 5.0 |
+|---|---|---|---|---|---|---|
+| worst at ym | +8.63 | +5.83 | +2.93 | +0.05 | -2.13 | -5.05 |
+
+Those particular points also have enormous *relative* error (up to 1e54) for an
+uninteresting reason: `yp + ym = 0` with equal pt and `dphi = pi` is the pair
+produced at rest, where the cross section has a zero. Relative error is the
+wrong metric next to a zero. It is recorded here so nobody rediscovers it and
+mistakes it for a catastrophe.
+
+### What actually governs the conditioning
+
+Over 100 000 points sampled from the real generator at production settings,
+binning the double-vs-quad relative error:
+
+| \|ym - yp\| | n | mean rel. err | max |
+|---|---|---|---|
+| 0.00-0.25 | 11686 | **5.8e-2** | 4.2e+2 |
+| 0.50-0.75 | 11457 | 2.0e-3 | 4.6 |
+| 1.75-2.00 | 6153 | 6.2e-4 | 2.3e-1 |
+| > 3.00 | 7326 | **1.8e-4** | 3.1e-2 |
+
+| \|dphi - pi\| | n | mean rel. err | max |
+|---|---|---|---|
+| < 0.001 | 1736 | **1.8e-1** | 1.8e+2 |
+| < 0.01 | 10581 | 5.5e-2 | 4.2e+2 |
+| < 0.05 | 15591 | 2.4e-3 | 1.4 |
+| < 0.5 | 16891 | **8.8e-5** | 1.7e-2 |
+
+Conditioning degrades monotonically as `ym -> yp` and `dphi -> pi`: a factor
+~300 across the rapidity-difference range and ~2000 across the azimuth range.
+
+The mechanism for the azimuthal half is concrete and has nothing to do with
+`gamma`. With `ppt = (ppvt, 0)` and `pmt = (pmvt*cos dphi, pmvt*sin dphi)`, the
+cross product `axy = x1*y2 - x2*y1` carries a factor `sin(dphi)`, which
+vanishes at `dphi = pi`. The `Id0..Id3` denominators
+`B = 4u*axy^2 + A` then lose their stabilising term and collapse onto `A`
+alone, and `Id3` divides by `B^3`.
+
+### Why this is the worst possible place for it
+
+**The sampler concentrates events exactly on the ill-conditioned locus.**
+
+- `DsdYmY` is a narrow Gaussian in `YmY = Yp - Ye` peaked at 0
+  (`parYmY(1)*exp(-8*Y**2)` for `|Y| < 0.18`).
+- `DsdPhi` peaks at `Phi = pi`; the only azimuthal cut in `ee_event`
+  (`Phi < 0.03 or Phi > 2*pi - 0.03`) removes the *collinear* configuration and
+  leaves the back-to-back one untouched.
+
+So 11.7% of sampled events land in `|ym-yp| < 0.25` and 1.7% within
+`|dphi-pi| < 0.001`, where the mean relative error is 18%. This is not a rare
+corner the generator wanders into; it is where the generator aims.
 
 ## 3. Why it ends in abort(), and why the existing guard cannot help
 
@@ -78,16 +129,51 @@ A single weight overestimated by 1e5 contributes ~1e10 to `Dsect2`. The
 convergence test in `TGenEpEmv1::CalcXSection`, `err/xSect < eps`, then cannot
 be satisfied; the loop runs to `fMaxXSTest = 1e7` and calls `abort()`.
 
-**The reported "convergence issues and initialization failures" are a variance
-blowup driven by positive outliers, not a quadrature failure.** Consequence for
-the port: escalate to higher precision on a *cancellation monitor*
+This is the mechanism by which a corrupted point could produce the reported
+"convergence issues and initialization failures" — a variance blowup, not a
+quadrature failure.
+
+**Measured, and it does not yet reproduce a failure.** Over 100 000 sampled
+points (seed 12345, production settings):
+
+| quantity | value |
+|---|---|
+| points where the guard fired (`dsigma` forced to 0) | 19 (0.019%) |
+| points with rel. err > 1e-9 | 96.2% |
+| points with rel. err > 1e-3 | 6.6% |
+| points with rel. err > 1e-1 | 249 (0.25%) |
+| **bias on sum(dsigma)** — the cross section | **-0.072%** |
+| **bias on sum(dsigma^2)** — what `Dsect2` accumulates | **-0.80%** |
+| largest single absolute error | 40.0, i.e. 0.04% of the whole sum |
+| points with `double > 3x quad` and `double > 1` | 4 |
+
+So: the loss of significance is pervasive (96% of events lose seven digits or
+more), but for this sample its *aggregate* effect is a 0.07% shift in the cross
+section — comfortably inside the 1% tolerance the generator runs with. The 249
+worst-relative-error points contribute 0.086% of the integral, because they sit
+where `dsigma` is small.
+
+Two things follow, and they should not be conflated:
+
+1. **The guard is inadequate on its own terms.** It fires on 0.019% of points
+   while 0.25% are more than 10% wrong — it catches roughly one in thirteen of
+   the badly wrong points, because it only ever sees the negative half.
+2. **A catastrophic initialisation failure has not yet been reproduced here.**
+   The worst outlier found so far is `double = 8.01` against `quad = 0.045` at
+   `yp=-6.82, ym=-6.73, dphi=3.14181` — 180x too large, but small against the
+   1084 maximum in the same sample, so not enough to poison `Dsect2`. A larger
+   hunt is running; until it lands, the abort chain in this section is a
+   *mechanism consistent with the report*, not something observed.
+
+Consequence for the port either way: escalate to higher precision on a
+*cancellation monitor*
 
 ```
 NT = sum(Ni) ;  escalate when |NT| / max|Ni| < ~1e-13
 ```
 
 never on the sign of `dsigma`. The threshold is to be calibrated from the
-Phase 2 double-vs-quad study, not guessed.
+Phase 2 study, not guessed.
 
 ## 4. A second, unreported numerical bug
 

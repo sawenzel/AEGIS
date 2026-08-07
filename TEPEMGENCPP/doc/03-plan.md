@@ -78,19 +78,20 @@ dependency. Inheritance stays only where ROOT's `TGenerator` mandates it.
 
 ## Phases
 
-### Phase 0 — oracle and harness
+### Phase 0 — oracle and harness — **done**
 
-- Build the unmodified Fortran. **Done**; see `02-findings.md` section 7.
-- Golden-point dumper: sample `(ppvt, yp, pmvt, ym, dphi)` from a real
-  `TGenQEDBg` run at production settings, emit ~1e5 points with the Fortran
-  `dsigma`, freeze as reference data.
-- Instrument `badcount` and the positive-outlier rate; report the failure rate
-  over many seeds. This turns the issue's "sometimes" into a number.
-- Two-energy rapidity scan to test the `arcosh(gamma)` localisation prediction.
-- Spike the `Dtrint` analytic reduction against the existing output.
+- Unmodified Fortran built and running; baseline in `02-findings.md` section 7.
+- **Quad oracle without a port**: `gfortran -freal-8-real-16` recompiles the
+  same `diffcross.f` in `REAL*16`. `tools/build_tools.sh` builds both.
+- `tools/dump_points` samples from the real sampler (`ee_init_`/`ee_event_`)
+  and records the double cross section; `tools/compare_precision` re-evaluates
+  in quad and reports the biases on `sum(dsigma)` and `sum(dsigma^2)`.
+- `tools/scan_rapidity_{d,q}` reproduces the O2-6340 figure.
+- Localisation **refuted and replaced**: it is `|ym-yp|` and `|dphi-pi|` that
+  govern conditioning, not `arcosh(gamma)`. See `02-findings.md` section 2.
 
-*Gate:* reference data frozen, failure rate measured, localisation confirmed or
-refuted.
+Still open from this phase, carried forward: spike the `Dtrint` analytic
+reduction (needed by Phase 3, not by Phase 1).
 
 ### Phase 1 — `diffcross.f` to templated C++, `double` only
 
