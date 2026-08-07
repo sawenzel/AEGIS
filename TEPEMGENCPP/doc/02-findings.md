@@ -330,3 +330,88 @@ rescales `NT` by `4/beta^2`, by `(2pi)^-4`, by `1/4` and into kbarn — about
 divides a rescaled numerator by an unscaled denominator and understates
 survival by that factor, which made every sampled point look catastrophically
 ill-conditioned and put the whole distribution in one histogram bin.
+
+## 10. Phase 2: what precision is actually needed, and what it costs
+
+Measured with `tools/calibrate`, `tools/bench` and `tools/strategy` on 100k
+points sampled from the real generator at production settings.
+
+### Cost of each arithmetic type
+
+| type | eps | us/call | vs double |
+|---|---|---|---|
+| `double` | 2.22e-16 | 11.2 | 1x |
+| `long double` (x87) | 1.08e-19 | 27.5 | **2.5x** |
+| `__float128` | 1.93e-34 | 1080 | **97x** |
+
+`__float128` is software-emulated. Quad throughout turns the 25 689-trial
+initialisation from 0.3 s into 28 s, and the hard-coded `fMaxXSTest = 1e7`
+worst case into three hours.
+
+### Effect on the quantities the generator uses
+
+| strategy | xsec bias | variance bias | escalated | us/call |
+|---|---|---|---|---|
+| double only | **-0.073%** | **-0.796%** | 0% | 11.1 |
+| long double only | +0.00001% | +0.00006% | 0% | 26.3 |
+| long double -> quad @1e-13 | +0.00000% | +0.00001% | 4.8% | 75.6 |
+| long double -> quad @1e-14 | -0.00001% | -0.00009% | 1.1% | 37.6 |
+| double -> quad @1e-7 | -0.00000% | -0.00000% | 94.0% | 980.7 |
+
+**The naive reading of the issue — "use `__float128`" — is both too much and
+too little.** Too much because quad throughout is 97x. Too little because
+escalating *from double* does not work: the monitor never exceeds 1e-4 and
+about half the integral comes from points below 1e-12, so holding the error
+under 1e-3 needs a 1e-7 threshold, which escalates 94% of points and recovers
+almost none of the speed.
+
+Simply moving the working type to `long double` improves the cross-section bias
+by a factor of 7000 for 2.5x the cost. That is the single highest-value change
+in this whole exercise, and it needs no adaptive machinery at all.
+
+### The monitor has a blind spot
+
+`survival = |NT| / max|Ni|` is **necessary but not sufficient**, for two
+reasons found by measurement rather than by design:
+
+1. **It is self-referential.** Each type computes survival from its own terms,
+   so a type whose terms are already corrupted reports an over-optimistic
+   value. At `ptp=ptm=1 MeV, yp=0, ym=0.05, dphi=pi`:
+
+   | | value | survival |
+   |---|---|---|
+   | double | 8.0e7 | 3.5e-11 |
+   | long double | 4.4e4 | 1.9e-14 |
+   | quad (truth) | 5.5e3 | 2.4e-15 |
+
+2. **It cannot see cancellation inside `Iz/Id/Iv`.** The `Id0..Id3`
+   denominators `B = 4u*axy^2 + A` collapse as `dphi -> pi`, and the final-sum
+   monitor is blind to that. Note the point above is the *peak* of the scan,
+   not a zero — this is not the relative-error-near-a-zero artefact of
+   section 2.
+
+Consequently the default threshold (1e-13) is chosen **empirically**: it is the
+largest value that keeps a deliberately worst-case scan (`dphi = pi`, 400
+points across the full rapidity range) within 1e-4 of the quad reference. At
+1e-14 that scan still leaves one point 8x wrong. The `eps/survival` heuristic
+would have suggested 1e-14 was ample; it is not.
+
+### Production cost, and how to pay for it
+
+`TGenQEDBg` generates `Poisson(fPairsInt)` pairs per event, and `fPairsInt` is
+~4200 at PbPb luminosity with a 20 us integration window. With
+`NEventsQED ~ 28000` that is ~1e8 `Diffcross` calls per production — so the
+per-call cost is not academic:
+
+| | per call | ~1e8 calls |
+|---|---|---|
+| double (today) | 11 us | ~22 min |
+| long double | 27 us | ~52 min |
+| long double -> quad @1e-13 | 76 us | ~2.5 h |
+
+The way to pay for this is the redundancy already noted in the plan: `Iv2` ->
+`Id2` -> `Id0`/`Iz0`/`Iz1` recomputes the same `Iz` values on the same
+arguments many times per point. Computing each `{Iz0,Iz1,Iz2}` triple once and
+passing it down is a mechanical change with no effect on the result, and it is
+the obvious place to recover the factor the wider type costs. **Not yet done**
+— it must come after the Phase 1 equivalence gate, never before.

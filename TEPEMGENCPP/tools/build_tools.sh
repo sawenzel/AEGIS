@@ -46,6 +46,16 @@ done
 \$CXX validate_cpp_d.o diffcross_d.o -o validate_cpp_d -lgfortran -lquadmath
 \$CXX validate_cpp_q.o diffcross_q.o -o validate_cpp_q -lgfortran -lquadmath
 
+# Calibration: pure C++, both instantiations in one binary (no Fortran, so no
+# symbol clash). The quad instantiation is the reference once Phase 1 passed.
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/calibrate.cxx -o calibrate -lquadmath
+
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/bench.cxx -o bench -lquadmath
+
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/strategy.cxx -o strategy -lquadmath
+
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/scan_cpp.cxx -o scan_cpp -lquadmath
+
 # Sampler: needs the real library (ee_event_ plus the eernd -> gRandom bridge).
 \$CXX -std=c++17 -O2 '$HERE'/dump_points.cxx -o dump_points \
      \$(root-config --cflags --libs) -L'$LIB' -lTEPEMGEN -Wl,-rpath,'$LIB' -lgfortran

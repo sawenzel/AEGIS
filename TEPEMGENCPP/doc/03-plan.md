@@ -128,14 +128,31 @@ agree to 1e-16 while *both* differ from the quad answer by ~1e-2 on average.
 They agree because they make the same rounding errors in the same order, not
 because either is right. Agreement between implementations is not accuracy.
 
-### Phase 2 — `__float128`, cancellation monitor, precision study
+### Phase 2 — precision policy — **done**
 
-Quad instantiation and the quadmath shim; escalation implemented and its
-threshold calibrated; double-vs-quad evaluated over the golden points to
-quantify which kinematic regions lose how many digits.
+`include/AdaptiveDiffCross.h`. The measured answer is **not** "use
+`__float128`": quad throughout costs 97x, and escalating from `double` needs a
+1e-7 threshold that escalates 94% of points. Moving the working type to
+`long double` improves the cross-section bias by a factor of 7000 for 2.5x the
+cost; quad then handles only the tail.
 
-*Gate:* the O2-6340 figure regenerated from the new code as a committed
-regression test.
+| strategy | xsec bias | variance bias | escalated | us/call |
+|---|---|---|---|---|
+| double only | -0.073% | -0.796% | 0% | 11.1 |
+| long double only | +0.00001% | +0.00006% | 0% | 26.3 |
+| **long double -> quad @1e-13** | **+0.00000%** | **+0.00001%** | **4.8%** | **75.6** |
+| double -> quad @1e-7 | -0.00000% | -0.00000% | 94.0% | 980.7 |
+
+The threshold is calibrated empirically, not from an error model: the monitor
+is self-referential and blind to cancellation inside `Iz/Id/Iv`, so
+`eps/survival` under-predicts. See `02-findings.md` section 10.
+
+*Gate:* `tools/scan_cpp` reproduces the O2-6340 figure and asserts the adaptive
+curve tracks the quad reference. At `dphi = pi` plain double is wrong by up to
+1.5e4 while the adaptive result stays within 2.9e-6.
+
+Carried forward: eliminate the redundant `Iz` recomputation in the `Id`/`Iv`
+call tree, which is where the cost of the wider type should be recovered.
 
 ### Phase 3 — `epemgen.f` sampler, quadrature replaced
 
