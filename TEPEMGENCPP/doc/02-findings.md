@@ -415,3 +415,56 @@ arguments many times per point. Computing each `{Iz0,Iz1,Iz2}` triple once and
 passing it down is a mechanical change with no effect on the result, and it is
 the obvious place to recover the factor the wider type costs. **Not yet done**
 — it must come after the Phase 1 equivalence gate, never before.
+
+## 11. Phase 3 spike: the Dtrint reduction holds, and Dtrint is the loose one
+
+`include/Envelopes.h` + `include/Quadrature.h` + `tools/test_norm`.
+
+The two triangles per `Dtrint` call do union to the square `[lo,hi]^2`, and
+under `u = Xp+Xe`, `v = Xp-Xe` (Jacobian 1/2) the domain becomes a diamond of
+half-width `L(u) = min(u-2lo, 2hi-u)`. The inner `v` integral is closed-form
+for both envelopes -- exponentials for `DsdXmX`, error functions plus an
+exponential tail for the piecewise `DsdYmY`. So
+
+```
+I = 1/2 * integral_{2lo}^{2hi} f(u) * G(L(u)) du
+```
+
+A 2-D adaptive triangle integration collapses to one 1-D integral, whose panel
+edges can be placed on the known kinks so nothing has to converge across one.
+**`dtrint.f` (229 lines of goto-driven CERNLIB) and the `MTLPRT` dependency
+can both go.**
+
+Numbers at production settings (`Xmin=0, Xmax=3`; `Ymin=-7, Ymax=7`):
+
+| | reduction | Dtrint | rel diff | Dtrint's own budget |
+|---|---|---|---|---|
+| XsecX | 2.012153900694043 | 2.011971250182245 | 9.1e-5 | 7.5e-5 |
+| XsecY | 224.9720738805846 | 224.9571343935239 | 6.6e-5 | 5.0e-5 |
+
+The disagreement is **Dtrint's**, not the reduction's. `ee_init` passes
+`Eps = 0.00005` and `Dtrint` stops at `|SUM0-SUM| <= EPS*(1+|SUM|)`, so ~1e-4
+is all it was asked for. Brute-force Simpson on a fine uniform grid — no
+adaptivity to go wrong — confirms the reduction for XsecX:
+
+```
+n=2000   2.0126131
+n=8000   2.0122073
+n=20000  2.0121590      -> reduction 2.0121539, not Dtrint's 2.0119713
+```
+
+The reduction's own quadrature converges to 2.4e-12 absolute in 12 panels.
+
+So the existing normalisation is accurate to ~1e-4, comfortably inside the 1%
+the generator runs with. Replacing `Dtrint` is therefore not a correction of a
+wrong number; it removes a **failure mode** — the silent `return 0` on
+non-convergence that leaves `ee_init` printing an error and carrying on with
+`XYsect = 0`, zeroing every event weight.
+
+A methodological note worth keeping: a nested adaptive 2-D integration was
+tried as the independent check and had to be discarded. The inner integral
+carries its own error, so the outer integrand is effectively noisy at that
+level; with the outer tolerance tighter than the inner it never converges, and
+the X case returned 2.238 against 2.012 from two independent methods. Either
+loosen the outer tolerance well below the inner, or use a non-adaptive method
+as the tie-breaker.

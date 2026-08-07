@@ -56,6 +56,8 @@ done
 
 \$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/scan_cpp.cxx -o scan_cpp -lquadmath
 
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/test_norm.cxx -o test_norm -lquadmath
+
 # Sampler: needs the real library (ee_event_ plus the eernd -> gRandom bridge).
 \$CXX -std=c++17 -O2 '$HERE'/dump_points.cxx -o dump_points \
      \$(root-config --cflags --libs) -L'$LIB' -lTEPEMGEN -Wl,-rpath,'$LIB' -lgfortran
