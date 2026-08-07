@@ -276,3 +276,57 @@ If correcting the arithmetic moves the cross section — and if the old code was
 losing digits, it should — that check fails and the amount of QED background in
 digitisation changes. This is a coordinated change needing agreement from
 whoever owns the QED normalisation, not a follow-up commit.
+
+## 9. Traps met while porting
+
+Recorded because each was silent, or nearly so, and each would have produced a
+wrong cross section that still compiled and still looked plausible.
+
+### A tab in the first six columns is a NEW statement
+
+`diffcross.f` line 778 begins with five spaces, a TAB, then `Id3= -( ...`.
+Under fixed-form rules with the GNU tab extension, a tab in columns 1-6 means
+the next character is column 7 — a new statement — unless it is a digit 1-9,
+which marks a continuation. A lexer that only tests "column 6 is non-blank"
+reads the tab as a continuation and silently glues
+
+```fortran
+      E11= tepxx
+```
+
+onto the 40-line `Id3` assignment that follows. Here it happened to produce
+code that would not compile; it could as easily have produced code that did.
+`tools/f2cpp.py` handles the tab rule and additionally rejects any RHS
+containing a stray `=`, which is the fingerprint of this class of merge.
+
+### A decimal literal is parsed at double, then widened
+
+`T(0.938)` builds a **double** literal and only then converts to `T`. gfortran
+parses `0.938D0` at the full width of `T`. Since 0.938 is not a dyadic
+rational, the two differ by ~1e-17 relative — invisible in the double build,
+and enough to dominate the quad comparison. Fixing it improved quad agreement
+by a factor of 26 000 (mean 7.4e-17 -> 2.8e-21).
+
+Note the criterion is **binary representability, not digit count**. An earlier
+guard rejected literals with more than 17 significant digits and let `0.938`
+straight through. Every decimal literal from the Fortran is now emitted as an
+exact rational, `T(938)/T(1000)`, which is correct for every `T` and needs no
+compiler flags.
+
+### The Fortran's own pi is only good to 25 digits
+
+`PARAMETER (PI=3.141592653589793238462643D0)` — true pi continues
+`...38327950288`. Harmless in double, but in `REAL*16` it caps the Fortran at
+~1e-25. The port uses `acos(-1)`, evaluated at `T`'s own precision, and is
+therefore *more* accurate than the oracle it is validated against. Confirmed
+not to be the cause of the residual disagreement by rebuilding with the
+truncated constant (`-DTEPEMGEN_FORTRAN_PI`) and observing no material change.
+
+### The cancellation monitor must be formed before normalisation
+
+`|NT| / max|Ni|` has to be taken at the moment of summation. `Diffcross` then
+rescales `NT` by `4/beta^2`, by `(2pi)^-4`, by `1/4` and into kbarn — about
+2.5e-4 in total — without touching the `Ni`. Taking the ratio afterwards
+divides a rescaled numerator by an unscaled denominator and understates
+survival by that factor, which made every sampled point look catastrophically
+ill-conditioned and put the whole distribution in one histogram bin.

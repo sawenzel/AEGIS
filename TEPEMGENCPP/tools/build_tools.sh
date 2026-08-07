@@ -40,6 +40,12 @@ done
 \$CXX -std=c++17 -O2 -I'$HERE' -DTEP_QUAD -c '$HERE'/compare_precision.cxx -o compare_precision.o
 \$CXX compare_precision.o diffcross_q.o -o compare_precision -lgfortran -lquadmath
 
+# Phase 1 gate: C++ port against the Fortran, at matching precision.
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include'            -c '$HERE'/validate_cpp.cxx -o validate_cpp_d.o
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' -DTEP_QUAD -c '$HERE'/validate_cpp.cxx -o validate_cpp_q.o
+\$CXX validate_cpp_d.o diffcross_d.o -o validate_cpp_d -lgfortran -lquadmath
+\$CXX validate_cpp_q.o diffcross_q.o -o validate_cpp_q -lgfortran -lquadmath
+
 # Sampler: needs the real library (ee_event_ plus the eernd -> gRandom bridge).
 \$CXX -std=c++17 -O2 '$HERE'/dump_points.cxx -o dump_points \
      \$(root-config --cflags --libs) -L'$LIB' -lTEPEMGEN -Wl,-rpath,'$LIB' -lgfortran
