@@ -35,6 +35,10 @@
 #include "TRandom.h"
 
 #include "TEpEmGen.h"
+#include "EpEmSampler.h"
+
+#include <cstdlib>
+#include <cstring>
 #include "TClonesArray.h"
 #include "TParticle.h"
 #include "TEcommon.h"
@@ -64,7 +68,43 @@ extern "C" {
 ClassImp(TEpEmGen)
 
 //------------------------------------------------------------------------------
-TEpEmGen::TEpEmGen() : TGenerator("TEpEmGen","TEpEmGen")
+// Backend selection. Both implementations are kept while the C++ port is being
+// validated against the Fortran; see TEPEMGENCPP/doc/03-plan.md.
+//------------------------------------------------------------------------------
+namespace
+{
+TEpEmGen::EBackend gDefaultBackend = TEpEmGen::kFortran;
+bool gDefaultBackendResolved = false;
+}  // namespace
+
+TEpEmGen::EBackend TEpEmGen::DefaultBackend()
+{
+  if (!gDefaultBackendResolved) {
+    gDefaultBackendResolved = true;
+    // Env var so a production job can switch implementation without a code or
+    // config change -- O2DPG reaches this class through QEDLoader.C, which
+    // takes no such parameter.
+    if (const char* e = std::getenv("TEPEMGEN_BACKEND")) {
+      if (std::strcmp(e, "cpp") == 0) {
+        gDefaultBackend = kCpp;
+      } else if (std::strcmp(e, "fortran") == 0) {
+        gDefaultBackend = kFortran;
+      } else {
+        printf("TEpEmGen: ignoring TEPEMGEN_BACKEND='%s' (expected cpp|fortran)\n", e);
+      }
+    }
+  }
+  return gDefaultBackend;
+}
+
+void TEpEmGen::SetDefaultBackend(EBackend b)
+{
+  gDefaultBackend = b;
+  gDefaultBackendResolved = true;
+}
+
+//------------------------------------------------------------------------------
+TEpEmGen::TEpEmGen() : TGenerator("TEpEmGen","TEpEmGen"), fBackend(DefaultBackend())
 {
 // TEpEmGen constructor: creates a TClonesArray in which it will store all
 // particles. Note that there may be only one functional TEpEmGen object
@@ -73,6 +113,8 @@ TEpEmGen::TEpEmGen() : TGenerator("TEpEmGen","TEpEmGen")
 }
 
 //------------------------------------------------------------------------------
+// Out of line: EpEmSampler is only forward-declared in the header, so the
+// unique_ptr deleter has to be instantiated where the type is complete.
 TEpEmGen::~TEpEmGen()
 {
   // Destroys the object, deletes and disposes all TParticles currently on list.
@@ -88,6 +130,16 @@ void TEpEmGen::GenerateEvent(Double_t ymin, Double_t ymax, Double_t ptmin, Doubl
 			     Double_t &phi12,     Double_t &weight)
 {
   //produce one event
+  if (fBackend == kCpp) {
+    const auto e = fSampler->next();
+    yElectron = e.yElectron;
+    yPositron = e.yPositron;
+    xElectron = e.xElectron;
+    xPositron = e.xPositron;
+    phi12     = e.phi;
+    weight    = e.weight;
+    return;
+  }
   ee_event(ymin,ymax,ptmin,ptmax,
 	   yElectron,yPositron,xElectron,xPositron,
 	   phi12,weight);
@@ -99,6 +151,31 @@ void TEpEmGen::Initialize(Double_t ymin, Double_t ymax, Double_t ptmin, Double_t
   // Initialize EpEmGen
   Double_t ptminMeV = ptmin*1000;
   Double_t ptmaxMeV = ptmax*1000;
+  if (fBackend == kCpp) {
+    o2::aegis::tepemgen::EpEmSampler::Config cfg;
+    cfg.yMin = ymin;
+    cfg.yMax = ymax;
+    cfg.ptMinMeV = ptminMeV;
+    cfg.ptMaxMeV = ptmaxMeV;
+    cfg.cmEnergyGeV = cm_energy;
+    cfg.z = Z;
+    // Same source of randomness as eernd, including its rejection of the
+    // endpoints -- log(0) appears in the sampler.
+    fSampler.reset(new o2::aegis::tepemgen::EpEmSampler(cfg, [] {
+      Double_t r;
+      do { r = gRandom->Rndm(); } while (r <= 0 || r >= 1);
+      return r;
+    }));
+    if (!fSampler->init()) {
+      // Unlike ee_init, which printed and carried on with XYsect = 0 --
+      // silently zeroing every event weight -- this refuses to proceed.
+      printf("TEpEmGen: C++ backend failed to initialise: %s\n",
+             fSampler->error().c_str());
+      fSampler.reset();
+      abort();
+    }
+    return;
+  }
   ee_init(ymin,ymax,ptminMeV,ptmaxMeV,cm_energy,Z);
 }
 
@@ -121,6 +198,7 @@ Int_t TEpEmGen::ImportParticles(TClonesArray *particles, Option_t *option)
 Double_t TEpEmGen::GetXsection()
 {
   // Return cross section accumulated so far
+  if (fBackend == kCpp) return fSampler ? fSampler->xSection() : 0.;
   return EEVENT.Xsecttot;
 }
 
@@ -128,5 +206,6 @@ Double_t TEpEmGen::GetXsection()
 Double_t TEpEmGen::GetDsection()
 {
   // Return cross section error accumulated so far
+  if (fBackend == kCpp) return fSampler ? fSampler->xSectionError() : 0.;
   return EEVENT.Dsecttot;
 }

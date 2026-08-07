@@ -28,7 +28,7 @@ int main(int argc, char** argv)
                  argv[0]);
     return 2;
   }
-  const long energy = std::atol(argv[1]);
+  const double energy = std::atof(argv[1]);
   const double ptp = std::atof(argv[2]), ptm = std::atof(argv[3]);
   const double yp = std::atof(argv[4]), dphi = std::atof(argv[5]);
   const double ymin = std::atof(argv[6]), ymax = std::atof(argv[7]);
@@ -41,8 +41,7 @@ int main(int argc, char** argv)
                                              5109991.0L / 10000000.0L);
   const auto pq = initDiffCross<__float128>(
       __float128(energy), __float128(5109991) / __float128(10000000));
-  AdaptiveDiffCross<long double, __float128> adaptive(energy, 1, 5109991,
-                                                      10000000, thr);
+  AdaptiveDiffCross<long double, __float128> adaptive(energy, thr);
 
   std::printf("# ym double longdouble adaptive quad survival_double\n");
   std::printf("# E=%ld ptp=%g ptm=%g yp=%g dphi=%.15g\n", energy, ptp, ptm, yp,

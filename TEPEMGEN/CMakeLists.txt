@@ -15,6 +15,10 @@ include(${ROOT_USE_FILE})
 link_directories($ENV{PYTHIA6_ROOT}/lib)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/.)
+# The C++ port lives alongside; TEpEmGen dispatches to it.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../TEPEMGENCPP/include)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(HEADERS 
   TGenQEDBg.h TGenEpEmv1.h TEpEmGen.h TEcommon.h)
@@ -23,7 +27,7 @@ ROOT_GENERATE_DICTIONARY(G__TEPEMGEN ${HEADERS} LINKDEF TEPEMGENLinkDef.h)
 
 #---Create a shared library with geneated dictionary
 add_library(TEPEMGEN SHARED TGenQEDBg.cxx TGenEpEmv1.cxx TEpEmGen.cxx epemgen.f diffcross.f dtrint.f G__TEPEMGEN.cxx)
-target_link_libraries(TEPEMGEN ${ROOT_LIBRARIES} pythia6 MICROCERN)
+target_link_libraries(TEPEMGEN ${ROOT_LIBRARIES} pythia6 MICROCERN quadmath)
 
 
 set_target_properties(TEPEMGEN

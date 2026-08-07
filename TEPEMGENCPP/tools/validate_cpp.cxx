@@ -80,8 +80,8 @@ int main(int argc, char** argv)
     // quad build to a double-precision test -- it would "PASS" at 1e-16 while
     // saying nothing about the 30-odd digits that are the entire reason the
     // quad instantiation exists.
-    using o2::aegis::tepemgen::abs;
-    const tepreal diff = abs(r.dsigma - fout) / abs(fout);
+    using o2::aegis::tepemgen::tepAbs;
+    const tepreal diff = tepAbs(r.dsigma - fout) / tepAbs(fout);
     const double rel = static_cast<double>(diff);
     const double vf = static_cast<double>(fout);
     const double vc = static_cast<double>(r.dsigma);

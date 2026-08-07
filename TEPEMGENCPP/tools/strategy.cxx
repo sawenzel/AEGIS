@@ -41,7 +41,7 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "usage: %s E_GeV pointsfile [n]\n", argv[0]);
     return 2;
   }
-  const long energy = std::atol(argv[1]);
+  const double energy = std::atof(argv[1]);
   const long limit = (argc > 3) ? std::atol(argv[3]) : 100000;
 
   std::vector<Point> pts;
@@ -72,8 +72,7 @@ int main(int argc, char** argv)
   };
 
   // Reference: quad everywhere.
-  AdaptiveDiffCross<__float128, __float128> quad(energy, 1, 5109991, 10000000,
-                                                 __float128(2));  // never escalates twice
+  AdaptiveDiffCross<__float128, __float128> quad(energy, __float128(2));  // never escalates
   Totals ref = run([&](double a, double b, double c, double d, double e) {
     return quad(a, b, c, d, e);
   });
@@ -84,16 +83,14 @@ int main(int argc, char** argv)
               "var bias", "escalated", "us/call", "%ref");
 
   {
-    AdaptiveDiffCross<double, double> d(energy, 1, 5109991, 10000000,
-                                        double(-1));  // never escalates
+    AdaptiveDiffCross<double, double> d(energy, double(-1));  // never escalates
     Totals t = run([&](double a, double b, double c, double dd, double e) {
       return d(a, b, c, dd, e);
     });
     row("double only", t, ref, n);
   }
   {
-    AdaptiveDiffCross<long double, long double> l(energy, 1, 5109991, 10000000,
-                                                  (long double)-1);
+    AdaptiveDiffCross<long double, long double> l(energy, (long double)-1);
     Totals t = run([&](double a, double b, double c, double dd, double e) {
       return l(a, b, c, dd, e);
     });
@@ -101,7 +98,7 @@ int main(int argc, char** argv)
   }
   for (int t10 = 12; t10 <= 15; ++t10) {
     AdaptiveDiffCross<long double, __float128> ad(
-        energy, 1, 5109991, 10000000, std::pow((long double)10, -t10));
+        energy, std::pow((long double)10, -t10));
     Totals t = run([&](double a, double b, double c, double dd, double e) {
       return ad(a, b, c, dd, e);
     });
@@ -111,8 +108,7 @@ int main(int argc, char** argv)
     row(lab, t, ref, n);
   }
   {
-    AdaptiveDiffCross<double, __float128> ad(energy, 1, 5109991, 10000000,
-                                             1e-7);
+    AdaptiveDiffCross<double, __float128> ad(energy, 1e-7);
     Totals t = run([&](double a, double b, double c, double dd, double e) {
       return ad(a, b, c, dd, e);
     });

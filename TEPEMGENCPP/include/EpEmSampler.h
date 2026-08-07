@@ -73,10 +73,7 @@ class EpEmSampler
   /// `rng` must return a uniform deviate in the OPEN interval (0,1) -- the
   /// Fortran's eernd rejects 0 and 1 explicitly, and log(0) appears below.
   EpEmSampler(const Config& cfg, std::function<double()> rng)
-    : mCfg(cfg), mRng(std::move(rng)),
-      // Exact rationals: a decimal literal would be rounded at double before
-      // the wider working type sees it. See DiffCross.h.
-      mCross(static_cast<long>(cfg.cmEnergyGeV), 1, 5109991, 10000000)
+    : mCfg(cfg), mRng(std::move(rng)), mCross(cfg.cmEnergyGeV)
   {
   }
 

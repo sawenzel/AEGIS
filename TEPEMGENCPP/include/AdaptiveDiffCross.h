@@ -64,17 +64,22 @@ template <typename Work = long double, typename Wide = __float128>
 class AdaptiveDiffCross
 {
  public:
-  /// `energy` per nucleon pair in GeV, `mass` the lepton mass in MeV.
+  /// `energyGeV` is the centre-of-mass energy per nucleon pair.
   ///
-  /// Both are taken as exact rationals rather than decimal literals: a literal
-  /// is parsed at double and rounded before the wider type sees it. See the
-  /// note in DiffCross.h.
-  AdaptiveDiffCross(long numEnergy, long denEnergy, long numMass, long denMass,
-                    Work threshold = Work(1e-13))
-    : mWork(initDiffCross<Work>(Work(numEnergy) / Work(denEnergy),
-                                Work(numMass) / Work(denMass))),
-      mWide(initDiffCross<Wide>(Wide(numEnergy) / Wide(denEnergy),
-                                Wide(numMass) / Wide(denMass))),
+  /// Taken as a plain double, deliberately. The exact-rational treatment in
+  /// DiffCross.h applies to SOURCE LITERALS, which are parsed at double and
+  /// rounded before a wider type sees them; a runtime double already IS a
+  /// double and widens exactly. An earlier version of this constructor took
+  /// the energy as an integer numerator, which would have silently truncated
+  /// any non-integer beam energy (5023.4 -> 5023).
+  ///
+  /// The electron mass IS a literal, so it stays a rational: 0.5109991 is not
+  /// dyadic, and `Work(0.5109991)` would round it at double first.
+  explicit AdaptiveDiffCross(double energyGeV, Work threshold = Work(1e-13))
+    : mWork(initDiffCross<Work>(static_cast<Work>(energyGeV),
+                                Work(5109991) / Work(10000000))),
+      mWide(initDiffCross<Wide>(static_cast<Wide>(energyGeV),
+                                Wide(5109991) / Wide(10000000))),
       mThreshold(threshold)
   {
   }

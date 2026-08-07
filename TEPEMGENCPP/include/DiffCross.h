@@ -41,7 +41,6 @@ namespace o2::aegis::tepemgen
 // multiprecision type that silently converts to double and throws away exactly
 // the precision this port exists to provide. ADL brings in the right overloads
 // for such types automatically.
-using std::abs;
 using std::acos;
 using std::cos;
 using std::cosh;
@@ -59,9 +58,21 @@ inline __float128 cosh(__float128 x) { return ::coshq(x); }
 inline __float128 sinh(__float128 x) { return ::sinhq(x); }
 inline __float128 cos(__float128 x) { return ::cosq(x); }
 inline __float128 sin(__float128 x) { return ::sinq(x); }
-inline __float128 abs(__float128 x) { return ::fabsq(x); }
 inline __float128 acos(__float128 x) { return ::acosq(x); }
 #endif
+
+/// |x|, without depending on any library overload.
+///
+/// Deliberately not an `abs(__float128)` overload in this namespace: some
+/// libstdc++ versions already declare `std::abs(__float128)` as a GNU
+/// extension, and combined with a `using std::abs;` here that is a redefinition
+/// -- which shows up only in translation units that happen to pull the right
+/// headers in, i.e. as a build break in one target and not another.
+template <typename T>
+constexpr T tepAbs(T x)
+{
+  return x < T(0) ? -x : x;
+}
 
 /// x^N by squaring, evaluating x once.
 /// Replaces Fortran's `**`. Not std::pow: that is slow, and on a user-supplied
