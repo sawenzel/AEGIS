@@ -90,7 +90,8 @@ TEpEmGen::EBackend TEpEmGen::DefaultBackend()
       } else if (std::strcmp(e, "fortran") == 0) {
         gDefaultBackend = kFortran;
       } else {
-        printf("TEpEmGen: ignoring TEPEMGEN_BACKEND='%s' (expected cpp|fortran)\n", e);
+        fprintf(stderr, "TEpEmGen: ignoring TEPEMGEN_BACKEND='%s' "
+                        "(expected cpp|fortran)\n", e);
       }
     }
   }
@@ -169,8 +170,14 @@ void TEpEmGen::Initialize(Double_t ymin, Double_t ymax, Double_t ptmin, Double_t
     if (!fSampler->init()) {
       // Unlike ee_init, which printed and carried on with XYsect = 0 --
       // silently zeroing every event weight -- this refuses to proceed.
-      printf("TEpEmGen: C++ backend failed to initialise: %s\n",
-             fSampler->error().c_str());
+      //
+      // stderr, not printf: stdout is FULLY buffered when redirected to a
+      // file, which every batch job does, so a printf here is lost in the
+      // buffer when abort() fires and the job dies with no explanation. That
+      // cost a real diagnosis during the first o2-sim integration test.
+      fprintf(stderr, "TEpEmGen: C++ backend failed to initialise: %s\n",
+              fSampler->error().c_str());
+      fflush(stderr);
       fSampler.reset();
       abort();
     }
