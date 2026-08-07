@@ -62,6 +62,14 @@ done
 
 \$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/total_xsec.cxx -o total_xsec -lquadmath
 
+# CPU comparison: the Fortran in both precisions, and every C++ variant.
+for v in d q; do
+  [ $v = d ] && D= || D=-DTEP_QUAD
+  \$CXX -std=c++17 -O2 -I'$HERE' \$D -c '$HERE'/bench_fortran.cxx -o bench_fortran_\$v.o
+  \$CXX bench_fortran_\$v.o diffcross_\$v.o -o bench_fortran_\$v -lgfortran -lquadmath
+done
+\$CXX -std=c++17 -O2 -I'$HERE' -I'$HERE/../include' '$HERE'/bench_cpp.cxx -o bench_cpp -lquadmath
+
 # Sampler: needs the real library (ee_event_ plus the eernd -> gRandom bridge).
 \$CXX -std=c++17 -O2 '$HERE'/dump_points.cxx -o dump_points \
      \$(root-config --cflags --libs) -L'$LIB' -lTEPEMGEN -Wl,-rpath,'$LIB' -lgfortran
