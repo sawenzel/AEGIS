@@ -60,7 +60,8 @@ namespace o2::aegis::tepemgen
 /// while 0.25% are more than 10% wrong. Worse, the half it misses flows into
 /// the event weight and, squared, into the variance estimate whose ratio to
 /// the mean drives the convergence test in TGenEpEmv1::CalcXSection.
-template <typename Work = long double, typename Wide = __float128>
+template <typename Work = long double, typename Wide = __float128,
+          typename Probe = double>
 class AdaptiveDiffCross
 {
  public:
@@ -75,12 +76,15 @@ class AdaptiveDiffCross
   ///
   /// The electron mass IS a literal, so it stays a rational: 0.5109991 is not
   /// dyadic, and `Work(0.5109991)` would round it at double first.
-  explicit AdaptiveDiffCross(double energyGeV, Work threshold = Work(1e-13))
+  explicit AdaptiveDiffCross(double energyGeV, Work threshold = Work(1e-11),
+                             double agreeTol = 1e-6)
     : mWork(initDiffCross<Work>(static_cast<Work>(energyGeV),
                                 Work(5109991) / Work(10000000))),
       mWide(initDiffCross<Wide>(static_cast<Wide>(energyGeV),
                                 Wide(5109991) / Wide(10000000))),
-      mThreshold(threshold)
+      mProbe(initDiffCross<Probe>(static_cast<Probe>(energyGeV),
+                                  Probe(5109991) / Probe(10000000))),
+      mThreshold(threshold), mAgreeTol(agreeTol)
   {
   }
 
@@ -102,7 +106,35 @@ class AdaptiveDiffCross
       ++mUnphysical;
       return 0.0;
     }
-    if (r.survival >= mThreshold) {
+    // TWO triggers, because one is not enough. The monitor is a proxy and it
+    // can lie -- see the LIMITATION note above and the point recorded in
+    // tools/worst_points.h, where Work reports survival 2.11e-13 (above a
+    // 1e-13 threshold, so no escalation) while the true survival is 7.3e-15
+    // and its answer is -1.33 against a true 0.046.
+    //
+    // The second trigger is direct rather than inferential: evaluate the same
+    // point in a NARROWER type and escalate if the two disagree. Two types
+    // that disagree cannot both be right, and unlike the monitor this cannot
+    // be fooled by terms that are already corrupted -- it measures the
+    // discrepancy instead of predicting it. On that point double gives 75508
+    // against Work's -1.33, so it fires immediately.
+    bool escalate = r.survival < mThreshold;
+    if (!escalate) {
+      const auto q = diffCross<Probe>(mProbe, static_cast<Probe>(ppvt),
+                                      static_cast<Probe>(yp),
+                                      static_cast<Probe>(pmvt),
+                                      static_cast<Probe>(ym),
+                                      static_cast<Probe>(dphi));
+      const double a = static_cast<double>(r.dsigma);
+      const double b = static_cast<double>(q.dsigma);
+      const double den = (a != 0.0) ? (a < 0 ? -a : a) : 1.0;
+      const double diff = (a - b < 0) ? (b - a) : (a - b);
+      if (!q.ok || diff / den > mAgreeTol) {
+        escalate = true;
+        ++mDisagreed;
+      }
+    }
+    if (!escalate) {
       return static_cast<double>(r.dsigma);
     }
     ++mEscalated;
@@ -121,16 +153,22 @@ class AdaptiveDiffCross
   std::int64_t calls() const { return mCalls; }
   std::int64_t escalated() const { return mEscalated; }
   std::int64_t unphysical() const { return mUnphysical; }
+  /// How often the narrow-type cross-check, rather than the monitor,
+  /// was what caught the point.
+  std::int64_t disagreed() const { return mDisagreed; }
   Work threshold() const { return mThreshold; }
   void setThreshold(Work t) { mThreshold = t; }
 
  private:
   PhysParams<Work> mWork;
   PhysParams<Wide> mWide;
+  PhysParams<Probe> mProbe;
   Work mThreshold;
+  double mAgreeTol;
   std::int64_t mCalls = 0;
   std::int64_t mEscalated = 0;
   std::int64_t mUnphysical = 0;
+  std::int64_t mDisagreed = 0;
 };
 
 }  // namespace o2::aegis::tepemgen

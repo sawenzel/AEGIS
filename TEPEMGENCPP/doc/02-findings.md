@@ -133,8 +133,7 @@ This is the mechanism by which a corrupted point could produce the reported
 "convergence issues and initialization failures" — a variance blowup, not a
 quadrature failure.
 
-**Measured, and it does not yet reproduce a failure.** Over 100 000 sampled
-points (seed 12345, production settings):
+**Measured over 100 000 sampled points** (seed 12345, production settings):
 
 | quantity | value |
 |---|---|
@@ -142,28 +141,40 @@ points (seed 12345, production settings):
 | points with rel. err > 1e-9 | 96.2% |
 | points with rel. err > 1e-3 | 6.6% |
 | points with rel. err > 1e-1 | 249 (0.25%) |
-| **bias on sum(dsigma)** — the cross section | **-0.072%** |
-| **bias on sum(dsigma^2)** — what `Dsect2` accumulates | **-0.80%** |
-| largest single absolute error | 40.0, i.e. 0.04% of the whole sum |
-| points with `double > 3x quad` and `double > 1` | 4 |
+| bias on sum(dsigma) | -0.072% |
+| bias on sum(dsigma^2) | -0.80% |
 
-So: the loss of significance is pervasive (96% of events lose seven digits or
-more), but for this sample its *aggregate* effect is a 0.07% shift in the cross
-section — comfortably inside the 1% tolerance the generator runs with. The 249
-worst-relative-error points contribute 0.086% of the integral, because they sit
-where `dsigma` is small.
+At that scale the loss of significance is pervasive but its *aggregate* effect
+is small, and the guard is already shown to be unsound on its own terms: it
+fires on 0.019% of points while 0.25% are more than 10% wrong, catching about
+one badly-wrong point in thirteen, because it only ever sees the negative half.
 
-Two things follow, and they should not be conflated:
+**CONFIRMED at 12 million events** (4 seeds x 3M). The catastrophe is real,
+it is intermittent, and it is exactly the mechanism above:
 
-1. **The guard is inadequate on its own terms.** It fires on 0.019% of points
-   while 0.25% are more than 10% wrong — it catches roughly one in thirteen of
-   the badly wrong points, because it only ever sees the negative half.
-2. **A catastrophic initialisation failure has not yet been reproduced here.**
-   The worst outlier found so far is `double = 8.01` against `quad = 0.045` at
-   `yp=-6.82, ym=-6.73, dphi=3.14181` — 180x too large, but small against the
-   1084 maximum in the same sample, so not enough to poison `Dsect2`. A larger
-   hunt is running; until it lands, the abort chain in this section is a
-   *mechanism consistent with the report*, not something observed.
+| seed | xsec bias | **variance bias** | worst outlier (double vs quad) |
+|---|---|---|---|
+| 777 | +0.016% | -0.026% | 2.98e6 vs ~0.036 |
+| 90210 | +2.41% | **+841%** | 75508.7 vs 0.0461 |
+| 5150 | +2.37% | **+598%** | 61583.3 vs 0.0361 |
+
+A single point returning 75508.7 where the truth is 0.046 -- **1.6 million
+times too large, and 21x the largest legitimate cross section anywhere in that
+3M-event sample** -- inflates `sum(dsigma^2)` by 841%. That is the variance
+estimate `Dsecttot` is built from, `err/xSect < eps` then cannot be satisfied,
+and `CalcXSection` runs to `fMaxXSTest = 1e7` and calls `abort()`.
+
+Every one of these outliers is **positive**, so the Fortran's sign guard never
+sees it. Whether a given run draws one is what "sometimes" means: two of four
+seeds did.
+
+**The catastrophic points share a signature**, and it is a corner rather than a
+generic point: both leptons at *minimum* pt (~1 MeV, the `ptMin` cut), both
+near the *rapidity edge* (|y| 6.3-6.9, against the |y| < 7 cut), and
+back-to-back in azimuth. They are kept as a regression fixture in
+`tools/worst_points.h`. Rounding their coordinates to ten digits does not
+remove the catastrophe, so this is a small ill-conditioned region, not a
+knife-edge.
 
 Consequence for the port either way: escalate to higher precision on a
 *cancellation monitor*
@@ -468,3 +479,40 @@ level; with the outer tolerance tighter than the inner it never converges, and
 the X case returned 2.238 against 2.012 from two independent methods. Either
 loosen the outer tolerance well below the inner, or use a non-adaptive method
 as the tie-breaker.
+
+
+## 12. The monitor needs a second, direct trigger
+
+Section 10 recorded that the cancellation monitor is necessary but not
+sufficient. The 12M-event hunt produced a real counter-example rather than a
+constructed one, and it forced a design change.
+
+At the seed-90210 catastrophic point the three tiers report:
+
+| | value | survival |
+|---|---|---|
+| double | 75508.7 | 1.21e-08 |
+| long double | **-1.33** | 2.11e-13 |
+| quad (truth) | 0.0461 | 7.30e-15 |
+
+`long double` reports survival 2.11e-13 -- comfortably above the 1e-13
+threshold that was the default, so **no escalation happened** -- while the true
+survival is 7.3e-15 and its answer is wrong by a factor 29 and has the wrong
+sign. The monitor is computed from terms that are themselves already
+corrupted, so it is most over-optimistic exactly where it matters.
+
+The fix is a second trigger that **measures** the instability instead of
+predicting it: evaluate the same point in a *narrower* type and escalate if the
+two disagree by more than 1e-6 relative. Two types that disagree cannot both be
+right, and unlike the monitor this cannot be fooled by corrupted terms. On the
+seed-777 point that is the only thing that catches it -- its `long double`
+survival is 9.79e-10, three decades above any sane threshold, while its answer
+is -5065 against a true 0.036.
+
+Both triggers are kept. `tools/test_worst` asserts the adaptive path returns
+the quad answer at all four known catastrophic points and reports which trigger
+fired; two are caught by the monitor, two only by the disagreement check.
+
+Cost: escalation rises from 4.7% to 47.7% of points. That is a deliberate trade
+-- CPU is not the binding constraint here, and the alternative is a generator
+that intermittently aborts.
