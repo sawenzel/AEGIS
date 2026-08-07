@@ -550,8 +550,9 @@ sigma = (Z*alpha)^4 * 2pi * Int dsigma * p+ dp+ * p- dp- * dy+ dy- ddphi
 |---|---|
 | pt > 0.02 MeV, \|y\| < 12 | 158 +- 10 kb |
 | pt > 0.002 MeV | 175 +- 15 kb |
-| pt < 20 GeV | **196 +- 18 kb** |
+| pt < 20 GeV | 196 +- 18 kb |
 | \|y\| < 16 | 470 +- 290 kb (62% error, not usable) |
+| **best: pt 0.002..20000 MeV, \|y\| < 13, 400k samples** | **198.3 +- 13 kb** |
 
 against
 
@@ -563,6 +564,15 @@ against
 
 The estimate rises monotonically as each truncation is relaxed and settles near
 the literature value. The earlier deficit was phase space, not physics.
+
+The best configuration gives **198.3 +- 13 kb**, and its tail diagnostic
+reports the largest single sample at 2.42% of the whole sum -- so it is a
+LOWER bound, not a measurement. That is the useful way to read the result:
+a lower bound of ~198 kb from this integration, an upper bound of 223 kb from
+the Racah Born point-like asymptotic, and the literature ~200 kb between them.
+Landing within one percent of the literature is better than a tail-dominated
+estimator deserves and should be read as luck rather than precision; the
+bracket is the real statement.
 
 ### What this does and does not establish
 
