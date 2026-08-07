@@ -3,3 +3,5 @@
 *.txt.gz
 points*.txt
 pts_*.txt
+__pycache__/
+*.pyc
