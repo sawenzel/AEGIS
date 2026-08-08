@@ -255,6 +255,8 @@ Two scripts in `tools/`, both using `derivation_driver.cxx` (the C++ port compil
 - `verify_integrals.py` — identifies each Iz/Id/Iv closed form against its
   defining integral (table in §8), generic O(1) arguments, agreement
   **1.7e-14**, unique in the exponent search space.
+- `verify_terms.py` — the exact term-level proof described in §10
+  (sympy + exact rational arithmetic; ~half an hour).
 - `verify_amplitude.py` — the full first-principles check: explicit Dirac
   spinors (Dirac representation, ūu = 2m), the Γ of §3, stable denominators
   of §5, two-patch log-polar quadrature (one patch per squared photon
@@ -287,13 +289,35 @@ Established:
   machinery for multiple pairs sits on top, outside `Diffcross`.
 - The scalar-integral basis and its closed forms (§8).
 
-Not established here, by choice:
+Established subsequently by `tools/verify_terms.py` (exact, not numeric):
 
-- **Term-by-term symbolic identity of N1..N18** with the reduced trace. The
-  numeric identity of the sum at machine precision across phase space makes
-  a term-level error that cancels pointwise implausible; a symbolic
-  re-reduction (sympy gamma algebra + the §8 recursions) is the natural next
-  step if wanted, and would also produce the restructured, Gram-stable form.
+- **The sum N1+...+N18 is identically the reduced squared amplitude**, in
+  exact rational arithmetic. At exactly-rational kinematics (pythagorean
+  transverse masses, rational exponentials for the rapidities) the spin sum
+  is an exact Dirac trace; an exact reduction engine (pointwise partial
+  fractions, reflection parity, box splitting) brings both the trace
+  integrand and the code's own terms -- coefficients parsed from
+  `diffcross.f`, calls mapped onto the physical denominators -- to a common
+  terminal basis of scalar triangles and bubbles. The two decompositions
+  differ, because terminal integrals are not independent in 2-D; the
+  difference is then proven to be an exact rational combination of null
+  relations (IBP identities for polynomial vector fields, plus
+  multiply-divide relations that carry the 2-D Gram redundancy), confirmed
+  over two independent prime fields and re-verified exactly over Q. The
+  check passes at two independent kinematic points (Schwartz-Zippel).
+
+  Two things this exercise surfaced. First, plain IBP with affine vector
+  fields does *not* span the needed identities -- the triangle-to-bubble
+  reduction (the code's own `Id0` formula) enters only through the Gram
+  redundancy, i.e. through the same `B = 4u axy^2 + A` structure whose
+  collinear degeneration is the instability of §8; the code's `Id0`
+  combination was itself proven exactly in the same way. Second, the code's
+  decomposition and the engine's canonical one differ in every coefficient
+  while summing to the same integral -- a concrete reminder that the N-term
+  *representation* is a reduction choice, and a Gram-stable rewriting is a
+  matter of choosing a different one.
+
+Not established here, by choice:
 - **Physics beyond the code's scope**: Coulomb corrections (higher orders in
   Zα — known to reduce the total by ~10-20% at LHC), nuclear form factors
   (point-like here; the pt cuts make this defensible for the QED-background
