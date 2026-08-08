@@ -133,7 +133,8 @@ content is numerical rather than physical:
   against a narrower type rather than a threshold on itself.
 
 Before that is publishable, three things are missing: the physics derivation
-check (the first open checkbox on O2-6340), the resolution of the discarded
+check (the first open checkbox on O2-6340 — since done, see
+`07-derivation.md`), the resolution of the discarded
 weight above -- which changes what the precision work is *for* -- and ideally
 (d), so the paper describes a generator rather than a bug fix. Computer Physics
 Communications takes "new version of an existing program" papers when the code

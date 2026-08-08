@@ -583,8 +583,11 @@ percent.
 
 It does **not** establish that the 5-fold differential cross section correctly
 encodes the amplitudes of Alscher et al. Confirming that means re-deriving it,
-which is the first checkbox on O2-6340 and remains open. Two further caveats
-worth stating plainly:
+which is the first checkbox on O2-6340 — since done: `07-derivation.md`
+derives the cross section from the external-field Feynman rules and verifies
+the code against it (spinor-level rebuild, agreement 1e-12; every Iz/Id/Iv
+closed form identified against its defining integral at 1.7e-14). Two further
+caveats worth stating plainly:
 
 - The Racah figure is convention-dependent: the same formula gives 223 kb for
   `L = ln(gamma^2)` and 289 kb for `L = ln(4 gamma^2)`. It is quoted here with
