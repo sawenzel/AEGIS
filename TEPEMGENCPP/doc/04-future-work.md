@@ -5,6 +5,17 @@ and validated. Items (a)-(d) form one coherent piece of work and are listed in
 the order they should be settled, because the answer to (a)/(b) decides whether
 (d) is necessary or merely nice.
 
+**Decision 2026-08-08 (operator):** the weights are not needed. The QED events
+are treated as noise for the detector response — they never enter a physics
+analysis through the AODs — so (a)/(b) are resolved as "no", (c) the explicit
+weightless mode is the recommended route, and (d) remains attractive even in a
+weighted future because a sampler prebuilt from the exact cross section would
+make the question moot. With that, the remaining items — a Gram-stable
+restructuring of the terms (see 07-derivation.md §10) and the model-level
+correction terms (Coulomb corrections, nuclear form factor) — are explicitly
+**beyond the intent of O2-6340**: research nice-to-haves that would round the
+project off for the internal note, not blockers for production use.
+
 ## The finding that motivates all of it
 
 In `TGenEpEmv1::GeneratePair` the per-event weight is filled by
